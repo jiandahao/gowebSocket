@@ -15,6 +15,7 @@ type wsConnection struct {
 	// message handler, default set as defaultMessageHandler
 	// in this handler function, you don't need to handle ping/pong message
 	MessageHandler  func(message *Message)
+	connManager     *ConnectionManager // connection manager
 	wg 				sync.WaitGroup
 	// heartbeat ping timer, if client haven't send any message to
 	// server before next ping-timer comes, try to send a ping message
@@ -42,7 +43,7 @@ func defaultMessageHandler(message *Message){
 	fmt.Println(message)
 }
 
-func NewConnection(c *websocket.Conn) *wsConnection{
+func (cm *ConnectionManager) NewConnection(c *websocket.Conn) *wsConnection{
 	conn :=  &wsConnection{
 		Conn:c,
 		Send:make(chan []byte),
@@ -50,6 +51,7 @@ func NewConnection(c *websocket.Conn) *wsConnection{
 		MessageHandler:defaultMessageHandler,
 		pingTimer:time.NewTimer(pingWait),
 		pongTimer:time.NewTimer(pongWait),
+		connManager:cm,
 	}
 	//sets the handler for close messages received from the peer
 	conn.Conn.SetCloseHandler(func(code int, text string) error {
@@ -141,6 +143,9 @@ type ConnectionManager struct {
 	// pingWait: period to send ping message to client side,
 	// to figure out whether client is still alive
 	pingWait 		  time.Duration
+	// connections Collection
+	mux 			  sync.Mutex // using for protect connCollection
+	connCollection 		  map[*wsConnection]bool
 }
 
 func (cm *ConnectionManager) SetMessageHandler(handler func(message *Message)){
@@ -157,6 +162,27 @@ func (cm *ConnectionManager) SetPongPeriod(period time.Duration){
 	cm.pongWait = period
 }
 
+func (cm *ConnectionManager) Register(conn *wsConnection){
+	cm.mux.Lock()
+	cm.connCollection[conn] = true
+	cm.mux.Unlock()
+}
+
+func (cm *ConnectionManager) UnRegister(conn *wsConnection){
+	cm.mux.Lock()
+	delete(cm.connCollection, conn)
+	cm.mux.Unlock()
+}
+
+func NewConnectionManager()*ConnectionManager{
+	return &ConnectionManager{
+		messageHandler: nil,
+		pongWait:       15*time.Second,
+		pingWait:       10*time.Second,
+		mux:            sync.Mutex{},
+		connCollection: make(map[*wsConnection]bool),
+	}
+}
 func (cm *ConnectionManager) HandleFunc(w http.ResponseWriter, r *http.Request){
 	//TODO add error handle details
 	conn, err := (&websocket.Upgrader{}).Upgrade(w,r,nil)
@@ -168,10 +194,15 @@ func (cm *ConnectionManager) HandleFunc(w http.ResponseWriter, r *http.Request){
 	}
 	defer conn.Close()
 
-	wsrvConn := NewConnection(conn)
-	if  cm.messageHandler != nil{
-		wsrvConn.MessageHandler = cm.messageHandler
-	}
+	wsrvConn := cm.NewConnection(conn)
+	//if  cm.messageHandler != nil{
+		wsrvConn.MessageHandler = func(message *Message) {
+			msg,_ := json.Marshal(message)
+			for conn := range cm.connCollection{
+				conn.SendMessage(msg)
+			}
+		}//cm.messageHandler
+	//}
 
 	if cm.pingWait > 0{
 		wsrvConn.pingWait = cm.pingWait
@@ -189,6 +220,8 @@ func (cm *ConnectionManager) HandleFunc(w http.ResponseWriter, r *http.Request){
 	wsrvConn.wg.Add(2)
 	go wsrvConn.ReadMessage()
 	go wsrvConn.WriteMessage()
+	cm.Register(wsrvConn)
 	wsrvConn.wg.Wait()
+	cm.UnRegister(wsrvConn)
 	fmt.Println("WsHandler exit.....")
 }

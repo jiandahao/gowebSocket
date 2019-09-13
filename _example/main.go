@@ -9,7 +9,7 @@ import (
 )
 
 func main(){
-	wh := new(webSocket.ConnectionManager)
+	wh := webSocket.NewConnectionManager()
 	wh.SetMessageHandler(func(message *webSocket.Message){
 		fmt.Println(message)
 		return
