@@ -36,13 +36,21 @@ func main(){
 				var msg map[string]interface{}
 				_ = json.Unmarshal(p, &msg)
 				if msg["msg"] == "ping"{
-					//_ = client.WriteMessage(websocket.TextMessage, []byte(`{"msg":"pong"}`))
+					_ = client.WriteMessage(websocket.TextMessage, []byte(`{"msg":"pong"}`))
 					continue
 				}
 			}
 		}
 	}()
-
+	//go func() {
+	//	for i:=0;i<10;i++{
+	//		time.Sleep(time.Second)
+	//		_ = client.WriteMessage(websocket.TextMessage, []byte(`{"msg":"normal","testBody":"test part"}`))
+	//	}
+	//	closeMessage := websocket.FormatCloseMessage(websocket.CloseMessage,"")
+	//	client.WriteControl(websocket.CloseMessage, closeMessage, time.Now().Add(time.Second))
+	//	return
+	//}()
 	wg.Wait()
 	fmt.Println("Read close")
 }
