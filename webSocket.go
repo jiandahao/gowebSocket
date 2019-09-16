@@ -67,7 +67,7 @@ func (wc *wsConnection) ReadMessage(){
 		fmt.Println("read close")
 	}()
 	for {
-		wc.pingTimer.Reset(pingWait)
+		wc.pingTimer.Reset(wc.pingWait)
 		_, p, err := wc.Conn.ReadMessage()
 		if err != nil {
 			log.Println("read message error: ", err)
@@ -106,7 +106,7 @@ func (wc *wsConnection) WriteMessage(){
 		wc.wg.Done()
 		fmt.Println("write close")
 	}()
-	wc.pingTimer.Reset(pingWait)
+	wc.pingTimer.Reset(wc.pingWait)
 	wc.pongTimer.Stop()
 	for {
 		select {
@@ -119,7 +119,7 @@ func (wc *wsConnection) WriteMessage(){
 				return
 			}
 			wc.pingTimer.Stop()
-			wc.pongTimer.Reset(pongWait)
+			wc.pongTimer.Reset(wc.pongWait)
 		case <- wc.pongTimer.C:
 			log.Println("No heartbeat detects from client, just close the connection")
 			// send a close message to client
